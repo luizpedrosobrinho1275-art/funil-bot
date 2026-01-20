@@ -1,4 +1,4 @@
-﻿# bot.py
+# bot.py
 # Bot Telegram com funil AIDA (estrutura conceitual) + 2 perguntas reais
 # Compatível com Python 3.10.11 + python-telegram-bot >= 20
 # CORREÇÕES:
@@ -14,7 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ================= CONFIG =================
-CHECKOUT_URL = "https://example.com/checkout"  # TODO: Alterar para sua URL
+CHECKOUT_URL = os.getenv("https://t.me/PAMpagamentosbot")
 BOT_TOKEN_ENV = "BOT_TOKEN"
 
 # ================= LOGGING =================
