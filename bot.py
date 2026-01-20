@@ -14,8 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ================= CONFIG =================
-CHECKOUT_URL =
-"https://t.me/PAMpagamentosbot"
+CHECKOUT_URL = "https://t.me/PAMpagamentosbot"
 BOT_TOKEN_ENV = os.getenv("BOT_TOKEN")
 
 # ================= LOGGING =================
@@ -268,3 +267,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
