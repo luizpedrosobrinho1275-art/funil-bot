@@ -14,15 +14,15 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ================= CONFIG =================
-CHECKOUT_URL = "https://t.me/PAMpagamentosbot"
-BOT_TOKEN_ENV = os.getenv("BOT_TOKEN")
+CHECKOUT_URL = os.getenv("CHECKOUT_URL", "https://t.me/PAMpagamentosbot")
+BOT_TOKEN_ENV = "BOT_TOKEN"
 
 # ================= LOGGING =================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name)
 
 # ================= ESTADOS =================
 STAGE_Q1 = "q1"
@@ -126,8 +126,6 @@ def kb_q2():
         InlineKeyboardButton("😏 Sim", callback_data="q2:sim"),
         InlineKeyboardButton("🤔 Depende", callback_data="q2:depende"),
     ]])
-
-
 def kb_final():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🥇 Resgatar agora", url=CHECKOUT_URL)],
@@ -186,6 +184,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if not query:
+        return
+
     await query.answer()
 
     user = update.effective_user
@@ -260,11 +261,9 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(on_button))
-
-    logger.info("Bot iniciado. Polling...")
+logger.info("Bot iniciado. Polling...")
     app.run_polling()
 
 
-if __name__ == "__main__":
+if name == "main":
     main()
-
