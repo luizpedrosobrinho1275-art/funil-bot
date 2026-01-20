@@ -14,8 +14,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ================= CONFIG =================
-CHECKOUT_URL = os.getenv("https://t.me/PAMpagamentosbot")
-BOT_TOKEN_ENV = "BOT_TOKEN"
+CHECKOUT_URL =
+"https://t.me/PAMpagamentosbot"
+BOT_TOKEN_ENV = os.getenv("BOT_TOKEN")
 
 # ================= LOGGING =================
 logging.basicConfig(
