@@ -1,270 +1,377 @@
-# bot.py
-# Bot Telegram com funil AIDA (estrutura conceitual) + 2 perguntas reais
-# Compatível com Python 3.10.11 + python-telegram-bot >= 20
-# CORREÇÕES:
-# - Sem exibir "Pergunta 1" e "Pergunta 2" no texto
-# - Botão "Voltar" do amarelar reinicia o funil completo (como novo /start)
-# - URL do checkout corrigida
-
 import os
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-# ================= CONFIG =================
-CHECKOUT_URL = "https://t.me/PAMpagamentosbot"
+# ============================================
+# CONFIGURAÇÃO
+# ============================================
 BOT_TOKEN_ENV = "BOT_TOKEN"
+CHECKOUT_URL = "https://t.me/SEU_BOT_DE_CHECKOUT"  # TROQUE AQUI
 
-# ================= LOGGING =================
+# ============================================
+# LOGGING
+# ============================================
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ================= ESTADOS =================
+# ============================================
+# ESTÁGIOS
+# ============================================
 STAGE_Q1 = "q1"
 STAGE_Q2 = "q2"
+STAGE_Q3 = "q3"
+STAGE_Q4 = "q4"
 STAGE_FINAL = "final"
 STAGE_REJECTED = "rejected"
 
-
+# ============================================
+# SESSÕES EM MEMÓRIA
+# ============================================
 @dataclass
 class UserSession:
     stage: str
-    message_id: Optional[int] = None
+    message_id: int
+    q1_answer: Optional[str] = None
+    q2_answer: Optional[str] = None
+    q3_answer: Optional[str] = None
+    q4_answer: Optional[str] = None
 
+SESSIONS: dict[int, UserSession] = {}
 
-SESSIONS: Dict[int, UserSession] = {}
-
-# ================= TEXTOS =================
-
-# A — ATENÇÃO (apenas texto introdutório, NÃO é pergunta)
-ATTENTION_TEXT = (
-    "👀 Leia com atenção.\n\n"
-    "Responda às próximas perguntas e concorra a uma seleção reservada.\n\n"
-    "Apenas 10 homens diferentes vão avançar.\n\n"
-    "A curiosidade trouxe você até aqui.\n"
-    "Vamos ver o que faz você ficar. 🔥\n\n"
+# ============================================
+# TEXTOS
+# ============================================
+OPENING_TEXT = (
+    "Que bom que você chegou.\n\n"
+    "Aqui tudo acontece com calma,\n"
+    "sem pressão e sem exposição.\n\n"
+    "Só quero entender se isso faz sentido pra você.\n\n"
 )
 
-# PERGUNTA 1 (SEM exibir "Pergunta 1:" no texto)
-Q1_QUESTION = (
-    "O que mais te prende quando percebe que alguém é diferente da maioria?\n"
+Q1_TEXT = (
+    "Me diz uma coisa…\n"
+    "você se sente mais à vontade quando a conversa é mais reservada?\n"
 )
 
 Q1_RESPONSE = {
-    "autenticidade": (
-        "Interessante.\n"
-        "Pouca gente sabe reconhecer quando algo é verdadeiro sem esforço.\n"
-        "Isso já diz bastante sobre você.\n\n"
-    ),
-    "personalidade": (
-        "Personalidade chama atenção antes mesmo das palavras.\n"
-        "Quem percebe isso costuma enxergar além do óbvio.\n\n"
-    ),
-    "conexao": (
-        "Nem todo mundo valoriza conexão de verdade.\n"
-        "Quando valoriza, geralmente é porque já sentiu falta disso antes.\n\n"
-    ),
+    "sim": "Entendi.\nIsso é mais comum do que parece.\n\n",
+    "depende": "Justo.\nTudo tem seu momento.\n\n"
 }
 
-# PERGUNTA 2 (SEM exibir "Pergunta 2:" no texto)
-Q2_QUESTION = (
-    "E quando algo não é aberto ao público,\n"
-    "mas reservado para poucos…\n"
-    "isso te atrai?\n"
+Q2_TEXT = (
+    "E quando a conversa flui de verdade,\n"
+    "o que mais importa pra você?\n"
 )
 
 Q2_RESPONSE = {
-    "sim": (
-        "Faz sentido.\n"
-        "Quem se sente atraído por isso geralmente não gosta do que é comum.\n"
-        "Vamos ver até onde você vai.\n\n"
-    ),
-    "depende": (
-        "Justo.\n"
-        "Nem tudo vale a pena só por ser exclusivo.\n"
-        "A diferença está no porquê — e você vai entender isso já.\n\n"
-    ),
+    "calma": "Ir com calma é essencial.\nSem pressa, tudo faz mais sentido.\n\n",
+    "vontade": "Se sentir à vontade muda tudo.\nÉ sobre estar confortável.\n\n",
+    "discricao": "Discrição é fundamental.\nNem tudo precisa ser exposto.\n\n",
+    "conexao": "Conexão de verdade é rara.\nQuando acontece, você sente.\n\n"
 }
 
-# A — AÇÃO (estrutura conceitual, tela final)
-FINAL_TEXT = (
-    "🏆 Parabéns.\n\n"
-    "Entre muitos perfis, o seu foi escolhido.\n\n"
-    "Você acaba de garantir acesso a uma proposta reservada,\n"
-    "liberada apenas para 10 homens selecionados.\n\n"
-    "🎁 Como parte dessa escolha,\n"
-    "vou liberar para você o acesso ao meu canal privado no Telegram\n"
-    "com 86% de desconto.\n\n"
-    "Isso não é público.\n"
-    "Não se repete.\n"
-    "É o resultado da sua seleção. ✨\n"
+Q3_TEXT = (
+    "Tem gente que gosta de tudo mais aberto,\n"
+    "outras preferem algo mais discreto.\n\n"
+    "Você se identifica mais com qual?\n"
 )
 
-# Texto de "quebra de ego" (rejected)
+Q3_RESPONSE = {
+    "discreto": "Entendo perfeitamente.\nAlgo mais reservado tem seu valor.\n\n",
+    "depende": "Faz sentido.\nCada momento pede uma coisa diferente.\n\n"
+}
+
+Q4_TEXT = (
+    "Se a conversa continuar nesse clima,\n"
+    "no seu tempo e sem exposição…\n\n"
+    "você teria vontade de seguir?\n"
+)
+
+TRANSITION_TEXT = (
+    "Ótimo.\n\n"
+    "Pelo que você respondeu,\n"
+    "isso combina bastante com o que acontece aqui.\n\n"
+    "Então deixa eu te explicar como funciona,\n"
+    "bem direto e sem enrolação.\n\n"
+)
+
+EXPLANATION_TEXT = (
+    "Esse espaço é fechado justamente\n"
+    "pra manter o clima, a discrição\n"
+    "e evitar bagunça.\n\n"
+    "Por isso, quem decide continuar\n"
+    "entra por um acesso simples,\n"
+    "só pra manter tudo organizado.\n\n"
+    "Hoje esse acesso custa R$ 2,90.\n"
+    "É só pra liberar a continuidade\n"
+    "e manter tudo funcionando do jeito certo.\n\n"
+)
+
+FINAL_TEXT = (
+    "Se fizer sentido pra você,\n"
+    "você pode continuar agora.\n"
+)
+
 AMARELAR_TEXT = (
     "Tudo bem.\n\n"
-    "Nem todo mundo se sente confortável quando percebe que foi realmente escolhido.\n\n"
-    "Se mudar de ideia, talvez ainda dê tempo. 😉\n"
+    "Sem pressa.\n"
+    "Se mudar de ideia, é só voltar e continuar no seu tempo.\n"
 )
 
-# ================= KEYBOARDS =================
-def kb_q1():
+OUT_OF_STAGE = "⚠️ Essa opção não está mais disponível. Use /start para recomeçar."
+
+# ============================================
+# TECLADOS
+# ============================================
+def kb_q1() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👀 Autenticidade", callback_data="q1:autenticidade")],
-        [InlineKeyboardButton("🧠 Personalidade", callback_data="q1:personalidade")],
-        [InlineKeyboardButton("😌 Conexão real", callback_data="q1:conexao")],
+        [InlineKeyboardButton("🔒 Sim, com certeza", callback_data="q1:sim")],
+        [InlineKeyboardButton("🙂 Depende do momento", callback_data="q1:depende")]
     ])
 
-
-def kb_q2():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("😏 Sim", callback_data="q2:sim"),
-        InlineKeyboardButton("🤔 Depende", callback_data="q2:depende"),
-    ]])
-
-
-def kb_final():
+def kb_q2() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🥇 Resgatar agora", url=CHECKOUT_URL)],
-        [InlineKeyboardButton("🟡 Amarelar", callback_data="final:amarelar")],
+        [InlineKeyboardButton("😌 Ir com calma", callback_data="q2:calma")],
+        [InlineKeyboardButton("🫶 Me sentir à vontade", callback_data="q2:vontade")],
+        [InlineKeyboardButton("🤫 Ter discrição", callback_data="q2:discricao")],
+        [InlineKeyboardButton("✨ Conexão", callback_data="q2:conexao")]
     ])
 
+def kb_q3() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🤫 Algo mais discreto", callback_data="q3:discreto")],
+        [InlineKeyboardButton("🤔 Depende da situação", callback_data="q3:depende")]
+    ])
 
-def kb_voltar():
+def kb_q4() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Sim, com calma", callback_data="q4:sim")],
+        [InlineKeyboardButton("👀 Talvez, quero entender melhor", callback_data="q4:talvez")]
+    ])
+
+def kb_final() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔓 Quero continuar", url=CHECKOUT_URL)],
+        [InlineKeyboardButton("🟡 Amarelar", callback_data="final:amarelar")]
+    ])
+
+def kb_voltar() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 Voltar", callback_data="final:voltar")]
     ])
 
+# ============================================
+# HELPERS
+# ============================================
+def expected_stage(callback_data: str) -> str:
+    """Retorna o estágio esperado baseado no callback_data"""
+    if callback_data.startswith("q1:"):
+        return STAGE_Q1
+    elif callback_data.startswith("q2:"):
+        return STAGE_Q2
+    elif callback_data.startswith("q3:"):
+        return STAGE_Q3
+    elif callback_data.startswith("q4:"):
+        return STAGE_Q4
+    elif callback_data.startswith("final:"):
+        return STAGE_FINAL
+    return ""
 
-# ================= HELPERS =================
-def is_stale_click(session: UserSession, update: Update) -> bool:
-    q = update.callback_query
-    if not q or not q.message:
+def is_stale_click(user_id: int, message_id: int) -> bool:
+    """Verifica se o clique é de uma mensagem antiga"""
+    session = SESSIONS.get(user_id)
+    if not session:
         return True
-    return session.message_id != q.message.message_id
+    return session.message_id != message_id
 
-
-def expected_stage(cb: str) -> str:
-    if ":" not in cb:
-        return "unknown"
-    p = cb.split(":", 1)[0]
-    return {
-        "q1": STAGE_Q1,
-        "q2": STAGE_Q2,
-        "final": STAGE_FINAL
-    }.get(p, "unknown")
-
-
-def get_initial_text_and_keyboard():
-    """Retorna texto e teclado da tela inicial (Atenção + Q1)"""
-    text = ATTENTION_TEXT + Q1_QUESTION
-    keyboard = kb_q1()
-    return text, keyboard
-
-
-# ================= HANDLERS =================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ============================================
+# COMANDO /start
+# ============================================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Inicia o funil"""
     user = update.effective_user
-    chat = update.effective_chat
-    if not user or not chat:
-        return
+    user_id = user.id
+    
+    logger.info(f"User {user_id} ({user.username}) iniciou o bot")
+    
+    # Envia a primeira mensagem
+    text = OPENING_TEXT + Q1_TEXT
+    message = await update.message.reply_text(
+        text=text,
+        reply_markup=kb_q1()
+    )
+    
+    # Cria/atualiza sessão
+    SESSIONS[user_id] = UserSession(
+        stage=STAGE_Q1,
+        message_id=message.message_id
+    )
 
-    session = UserSession(stage=STAGE_Q1)
-    SESSIONS[user.id] = session
-
-    text, reply_markup = get_initial_text_and_keyboard()
-
-    msg = await context.bot.send_message(chat.id, text, reply_markup=reply_markup)
-    session.message_id = msg.message_id
-    logger.info(f"START user_id={user.id}")
-
-
-async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ============================================
+# HANDLER DE CALLBACKS
+# ============================================
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Processa todos os callbacks de botões"""
     query = update.callback_query
     await query.answer()
-
-    user = update.effective_user
-    if not user:
+    
+    user_id = query.from_user.id
+    callback_data = query.data
+    message_id = query.message.message_id
+    
+    logger.info(f"User {user_id} clicou em: {callback_data}")
+    
+    # Verifica se é clique antigo (stale)
+    if is_stale_click(user_id, message_id):
+        logger.warning(f"Stale click detectado para user {user_id}")
+        await query.answer("⚠️ Use /start para recomeçar", show_alert=True)
         return
-
-    session = SESSIONS.get(user.id)
+    
+    session = SESSIONS.get(user_id)
     if not session:
-        logger.info(f"NO_SESSION user_id={user.id}")
+        await query.edit_message_text(OUT_OF_STAGE)
         return
-
-    if is_stale_click(session, update):
-        logger.info(f"STALE_CLICK user_id={user.id}")
+    
+    # Valida estágio
+    expected = expected_stage(callback_data)
+    if session.stage != expected:
+        logger.warning(f"User {user_id} em stage {session.stage}, esperado {expected}")
+        await query.answer("⚠️ Opção fora de ordem. Use /start", show_alert=True)
         return
+    
+    # Roteamento por estágio
+    if callback_data.startswith("q1:"):
+        await handle_q1(query, session, callback_data)
+    elif callback_data.startswith("q2:"):
+        await handle_q2(query, session, callback_data)
+    elif callback_data.startswith("q3:"):
+        await handle_q3(query, session, callback_data)
+    elif callback_data.startswith("q4:"):
+        await handle_q4(query, session, callback_data)
+    elif callback_data.startswith("final:"):
+        await handle_final(query, session, callback_data)
 
-    data = query.data
-    stage_required = expected_stage(data)
+# ============================================
+# HANDLERS POR ESTÁGIO
+# ============================================
+async def handle_q1(query, session: UserSession, callback_data: str) -> None:
+    """Processa resposta da Q1 e mostra Q2"""
+    answer = callback_data.split(":")[1]
+    session.q1_answer = answer
+    
+    response = Q1_RESPONSE.get(answer, "")
+    text = response + Q2_TEXT
+    
+    await query.edit_message_text(
+        text=text,
+        reply_markup=kb_q2()
+    )
+    
+    session.stage = STAGE_Q2
 
-    # Exceção: "final:voltar" pode vir de STAGE_REJECTED
-    if data == "final:voltar" and session.stage == STAGE_REJECTED:
-        # REINICIAR O FUNIL COMPLETO (como novo /start)
+async def handle_q2(query, session: UserSession, callback_data: str) -> None:
+    """Processa resposta da Q2 e mostra Q3"""
+    answer = callback_data.split(":")[1]
+    session.q2_answer = answer
+    
+    response = Q2_RESPONSE.get(answer, "")
+    text = response + Q3_TEXT
+    
+    await query.edit_message_text(
+        text=text,
+        reply_markup=kb_q3()
+    )
+    
+    session.stage = STAGE_Q3
+
+async def handle_q3(query, session: UserSession, callback_data: str) -> None:
+    """Processa resposta da Q3 e mostra Q4"""
+    answer = callback_data.split(":")[1]
+    session.q3_answer = answer
+    
+    response = Q3_RESPONSE.get(answer, "")
+    text = response + Q4_TEXT
+    
+    await query.edit_message_text(
+        text=text,
+        reply_markup=kb_q4()
+    )
+    
+    session.stage = STAGE_Q4
+
+async def handle_q4(query, session: UserSession, callback_data: str) -> None:
+    """Processa resposta da Q4 e mostra tela final"""
+    answer = callback_data.split(":")[1]
+    session.q4_answer = answer
+    
+    text = TRANSITION_TEXT + EXPLANATION_TEXT + FINAL_TEXT
+    
+    await query.edit_message_text(
+        text=text,
+        reply_markup=kb_final()
+    )
+    
+    session.stage = STAGE_FINAL
+
+async def handle_final(query, session: UserSession, callback_data: str) -> None:
+    """Processa ações da tela final"""
+    action = callback_data.split(":")[1]
+    
+    if action == "amarelar":
+        await query.edit_message_text(
+            text=AMARELAR_TEXT,
+            reply_markup=kb_voltar()
+        )
+        session.stage = STAGE_REJECTED
+        logger.info(f"User {query.from_user.id} amarelou")
+    
+    elif action == "voltar":
+        # Reinicia o funil inteiro
+        text = OPENING_TEXT + Q1_TEXT
+        await query.edit_message_text(
+            text=text,
+            reply_markup=kb_q1()
+        )
+        # Reseta a sessão
         session.stage = STAGE_Q1
-        text, reply_markup = get_initial_text_and_keyboard()
-        await query.edit_message_text(text, reply_markup=reply_markup)
-        logger.info(f"RESTART_FUNNEL user_id={user.id}")
-        return
+        session.q1_answer = None
+        session.q2_answer = None
+        session.q3_answer = None
+        session.q4_answer = None
+        logger.info(f"User {query.from_user.id} voltou ao início")
 
-    if stage_required != session.stage:
-        logger.info(f"OUT_OF_STAGE user_id={user.id} current={session.stage} expected={stage_required}")
-        return
-
-    prefix, choice = data.split(":", 1)
-
-    # ===== PERGUNTA 1 =====
-    if session.stage == STAGE_Q1 and prefix == "q1":
-        if choice not in Q1_RESPONSE:
-            return
-
-        text = Q1_RESPONSE[choice] + Q2_QUESTION
-        session.stage = STAGE_Q2
-        await query.edit_message_text(text, reply_markup=kb_q2())
-        logger.info(f"Q1 user_id={user.id} choice={choice}")
-        return
-
-    # ===== PERGUNTA 2 =====
-    if session.stage == STAGE_Q2 and prefix == "q2":
-        if choice not in Q2_RESPONSE:
-            return
-
-        text = Q2_RESPONSE[choice] + FINAL_TEXT
-        session.stage = STAGE_FINAL
-        await query.edit_message_text(text, reply_markup=kb_final())
-        logger.info(f"Q2 user_id={user.id} choice={choice}")
-        return
-
-    # ===== TELA FINAL =====
-    if session.stage == STAGE_FINAL and prefix == "final":
-        if choice == "amarelar":
-            session.stage = STAGE_REJECTED
-            await query.edit_message_text(AMARELAR_TEXT, reply_markup=kb_voltar())
-            logger.info(f"AMARELAR user_id={user.id}")
-        return
-
-
-# ================= MAIN =================
-def main():
+# ============================================
+# MAIN
+# ============================================
+def main() -> None:
+    """Inicia o bot"""
     token = os.getenv(BOT_TOKEN_ENV)
     if not token:
-        raise RuntimeError(f"Defina a variável de ambiente {BOT_TOKEN_ENV}")
-
-    app = Application.builder().token(token).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(on_button))
-
-    logger.info("Bot iniciado. Polling...")
-    app.run_polling()
-
+        logger.error(f"Token não encontrado. Configure a variável {BOT_TOKEN_ENV}")
+        return
+    
+    # Cria aplicação
+    application = Application.builder().token(token).build()
+    
+    # Registra handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Inicia o bot
+    logger.info("Bot iniciado com sucesso!")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
