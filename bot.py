@@ -15,7 +15,7 @@ from telegram.ext import (
 # CONFIGURAÇÃO
 # ============================================
 BOT_TOKEN_ENV = "BOT_TOKEN"
-CHECKOUT_URL = "https://t.me/SEU_BOT_DE_CHECKOUT"  # TROQUE AQUI
+CHECKOUT_URL = "https://t.me/PAMpagamentosbot"
 
 # ============================================
 # LOGGING
@@ -76,10 +76,26 @@ Q2_TEXT = (
 )
 
 Q2_RESPONSE = {
-    "calma": "Ir com calma é essencial.\nSem pressa, tudo faz mais sentido.\n\n",
-    "vontade": "Se sentir à vontade muda tudo.\nÉ sobre estar confortável.\n\n",
-    "discricao": "Discrição é fundamental.\nNem tudo precisa ser exposto.\n\n",
-    "conexao": "Conexão de verdade é rara.\nQuando acontece, você sente.\n\n"
+    "calma": (
+        "Ir com calma é essencial.\n"
+        "Sem pressa, tudo faz mais sentido.\n"
+        "É sobre respeitar o tempo de cada um.\n\n"
+    ),
+    "vontade": (
+        "Se sentir à vontade muda tudo.\n"
+        "É sobre estar confortável de verdade,\n"
+        "sem forçar nada.\n\n"
+    ),
+    "discricao": (
+        "Discrição é fundamental.\n"
+        "Nem tudo precisa ser exposto.\n"
+        "Algumas coisas são melhores quando ficam entre poucos.\n\n"
+    ),
+    "conexao": (
+        "Conexão de verdade é rara.\n"
+        "Quando acontece, você sente.\n"
+        "É sobre estar presente, sem máscaras.\n\n"
+    )
 }
 
 Q3_TEXT = (
@@ -169,7 +185,7 @@ def kb_final() -> InlineKeyboardMarkup:
 
 def kb_voltar() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Voltar", callback_data="final:voltar")]
+        [InlineKeyboardButton("😅 Mudei de ideia", callback_data="final:voltar")]
     ])
 
 # ============================================
@@ -186,6 +202,9 @@ def expected_stage(callback_data: str) -> str:
     elif callback_data.startswith("q4:"):
         return STAGE_Q4
     elif callback_data.startswith("final:"):
+        # Exceção: final:voltar pode vir de STAGE_REJECTED
+        if callback_data == "final:voltar":
+            return STAGE_REJECTED
         return STAGE_FINAL
     return ""
 
